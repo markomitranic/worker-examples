@@ -65,7 +65,7 @@ async function processRequest(originalRequest, event) {
     // Clone the request, add the edge-cache header and send it through.
     let request = new Request(originalRequest);
     request.headers.set('x-HTML-Edge-Cache', 'supports=cache|purgeall|bypass-cookies');
-
+    
     if (bypassCache) {
       request = createBypassCacheRequest(request);
     }
@@ -78,6 +78,7 @@ async function processRequest(originalRequest, event) {
         status += ', Purged';
       }
       bypassCache = bypassCache || shouldBypassEdgeCache(request, response);
+
       if ((!options || options.cache) && isHTML &&
           originalRequest.method === 'GET' && response.status === 200 &&
           !bypassCache) {
@@ -127,13 +128,17 @@ async function processRequest(originalRequest, event) {
 function shouldBypassEdgeCache(request, response) {
   let bypassCache = false;
 
-  if (request && response) {
-    const options = getResponseOptions(response);
-    const cookieHeader = request.headers.get('cookie');
+  if (request) {
+
     let bypassCookies = DEFAULT_BYPASS_COOKIES;
-    if (options) {
-      bypassCookies = options.bypassCookies;
+    if (response) {
+      const options = getResponseOptions(response);
+      if (options) {
+        bypassCookies = options.bypassCookies;
+      }
     }
+
+    let cookieHeader = request.headers.get('cookie');
     if (cookieHeader && cookieHeader.length && bypassCookies.length) {
       const cookies = cookieHeader.split(';');
       for (let cookie of cookies) {
@@ -176,7 +181,8 @@ async function getCachedResponse(request) {
     noCache = true;
     status = 'Bypass for Reload';
   }
-  if (!noCache && request.method === 'GET' && accept && accept.indexOf('text/html') >= 0) {
+
+  if (!noCache && request.method === 'GET') {
     // Build the versioned URL for checking the cache
     cacheVer = await GetCurrentCacheVersion(cacheVer);
     const cacheKeyRequest = GenerateCacheRequest(request, cacheVer);
@@ -185,13 +191,14 @@ async function getCachedResponse(request) {
     try {
       let cache = caches.default;
       let cachedResponse = await cache.match(cacheKeyRequest);
+
+      // Check to see if the response needs to be bypassed because of a cookie
+      bypassCache = shouldBypassEdgeCache(request, cachedResponse);
+
       if (cachedResponse) {
         // Copy Response object so that we can edit headers.
         cachedResponse = new Response(cachedResponse.body, cachedResponse);
 
-        // Check to see if the response needs to be bypassed because of a cookie
-        bypassCache = shouldBypassEdgeCache(request, cachedResponse);
-      
         // Copy the original cache headers back and clean up any control headers
         if (bypassCache) {
           status = 'Bypass Cookie';
@@ -393,7 +400,6 @@ function GenerateCacheRequest(request, cacheVer) {
   return new Request(cacheUrl);
 }
 
-
 function createBypassCacheRequest(request) {
   const req = request instanceof Request ? request : new Request(request);
 
@@ -405,4 +411,3 @@ function createBypassCacheRequest(request) {
   let new_url = url.toString();
   return new Request(new_url, req)
 }
-
