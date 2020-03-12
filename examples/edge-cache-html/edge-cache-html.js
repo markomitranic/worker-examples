@@ -65,6 +65,10 @@ async function processRequest(originalRequest, event) {
     // Clone the request, add the edge-cache header and send it through.
     let request = new Request(originalRequest);
     request.headers.set('x-HTML-Edge-Cache', 'supports=cache|purgeall|bypass-cookies');
+
+    if (bypassCache) {
+      request = createBypassCacheRequest(request);
+    }
     response = await fetch(request);
 
     if (response) {
@@ -388,3 +392,17 @@ function GenerateCacheRequest(request, cacheVer) {
   cacheUrl += 'cf_edge_cache_ver=' + cacheVer;
   return new Request(cacheUrl);
 }
+
+
+function createBypassCacheRequest(request) {
+  const req = request instanceof Request ? request : new Request(request);
+
+  let url = new URL(req.url);
+  let query_string = url.search;
+  let search_params = new URLSearchParams(query_string); 
+  search_params.set('wdtcack', '1');
+  url.search = search_params.toString();
+  let new_url = url.toString();
+  return new Request(new_url, req)
+}
+
